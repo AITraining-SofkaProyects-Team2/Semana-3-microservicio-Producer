@@ -80,9 +80,16 @@ export const createComplaintsService = (
       incidentType: ticket.incidentType,
     });
 
-    // Publish event — persistence is handled by the Consumer (§2.2)
-    // Facade throws MessagingError if it fails
-    await messaging.publishTicketCreated(ticket);
+    // Publish event asynchronously — persistence is handled by the Consumer (§2.2)
+    // We intentionally do not await the publish here (fire-and-forget) so the
+    // API can accept requests even if the broker is temporarily slow/unavailable.
+    // Errors are logged for observability; the request returns immediately.
+    messaging.publishTicketCreated(ticket)
+      .then(() => logger.info('Ticket event published (async)', { ticketId: ticket.ticketId }))
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('Failed to publish ticket event (async)', { ticketId: ticket.ticketId, error: message });
+      });
 
     return ticket;
   },
