@@ -25,7 +25,7 @@ describe('complaintsController', () => {
   });
 
   describe('createComplaint', () => {
-    it('devuelve 201 y el ticket cuando createTicket resuelve', async () => {
+    it('devuelve 202 y el ack reducido cuando createTicket resuelve', async () => {
       const ticket = {
         ticketId: 't-1',
         status: 'RECEIVED' as const,
@@ -45,8 +45,13 @@ describe('complaintsController', () => {
         mockNext
       );
 
-      expect(mockRes.status).toHaveBeenCalledWith(201);
-      expect(mockRes.json).toHaveBeenCalledWith(ticket);
+      expect(mockRes.status).toHaveBeenCalledWith(202);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        ticketId: ticket.ticketId,
+        status: ticket.status,
+        message: 'Accepted for processing',
+        createdAt: ticket.createdAt.toISOString(),
+      });
       expect(mockNext).not.toHaveBeenCalled();
     });
 
