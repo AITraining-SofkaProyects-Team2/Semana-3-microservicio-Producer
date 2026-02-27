@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger.js';
 import { RabbitMQConnectionManager } from '../messaging/RabbitMQConnectionManager.js';
+import { MessagingError } from '../errors/messaging.error.js';
 import { TicketMessageSerializer } from '../messaging/TicketMessageSerializer.js';
 import { MessagingFacade } from '../messaging/MessagingFacade.js';
 import { rabbitmqConfig } from '../config/index.js';
@@ -80,10 +81,13 @@ export const createComplaintsService = (
       incidentType: ticket.incidentType,
     });
 
-    // Publish event asynchronously — persistence is handled by the Consumer (§2.2)
-    // We intentionally do not await the publish here (fire-and-forget) so the
-    // API can accept requests even if the broker is temporarily slow/unavailable.
-    // Errors are logged for observability; the request returns immediately.
+    // If the connection manager reports the broker is unavailable, fail fast
+    // with a MessagingError (handled centrally as HTTP 503). Otherwise publish
+    // asynchronously (fire-and-forget) to keep API latency low.
+    if (!RabbitMQConnectionManager.getInstance().isConnected()) {
+      throw new MessagingError('Canal de mensajería no disponible', ticket.ticketId);
+    }
+
     messaging.publishTicketCreated(ticket)
       .then(() => logger.info('Ticket event published (async)', { ticketId: ticket.ticketId }))
       .catch((err: unknown) => {
