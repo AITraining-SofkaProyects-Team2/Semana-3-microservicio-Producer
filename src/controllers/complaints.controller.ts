@@ -18,10 +18,11 @@ export const complaintsController = {
   /**
    * Handles `POST /complaints` — creates a new complaint ticket.
    *
-   * Steps:
-   * 1. Extracts validated fields from `req.body`.
-   * 2. Delegates ticket creation and publishing to `complaintsService.createTicket`.
-   * 3. Returns 201 with the created ticket.
+  * Steps:
+  * 1. Extracts validated fields from `req.body`.
+  * 2. Delegates ticket creation and publishing to `complaintsService.createTicket`.
+  * 3. Returns 202 Accepted with a minimal acknowledgement (the Consumer
+  *    performs persistence asynchronously).
    *
    * @param {Request} req - Express request with validated body.
    * @param {Response} res - Express response.

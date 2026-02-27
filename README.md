@@ -64,16 +64,12 @@ Content-Type: application/json
 }
 ```
 
-**Respuesta (201):**
+**Respuesta (202 Accepted):**
 ```json
 {
   "ticketId": "uuid",
-  "lineNumber": "555-1234",
-  "email": "usuario@ejemplo.com",
-  "incidentType": "SLOW_CONNECTION",
-  "description": null,
   "status": "RECEIVED",
-  "priority": "PENDING",
+  "message": "Accepted for processing",
   "createdAt": "2026-02-05T18:00:00.000Z"
 }
 ```
