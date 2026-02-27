@@ -39,10 +39,10 @@ registerGracefulShutdown(connectionManager);
 // Start server
 const startServer = async (): Promise<void> => {
   try {
-    // Connect to RabbitMQ via Singleton
-    await connectionManager.connect();
+    // Start background connection attempts to RabbitMQ (non-blocking)
+    connectionManager.connectInBackground();
 
-    // Start Express server
+    // Start Express server immediately
     app.listen(serverConfig.port, () => {
       logger.info(`Producer service started`, {
         port: serverConfig.port,
