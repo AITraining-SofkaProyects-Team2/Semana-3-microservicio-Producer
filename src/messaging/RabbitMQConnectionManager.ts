@@ -116,6 +116,28 @@ class RabbitMQConnectionManager implements IConnectionManager {
     }
 
     /**
+     * Inicia intentos de conexión en segundo plano sin bloquear el hilo de arranque.
+     * Mantiene reintentos indefinidos con backoff cuando falla la conexión.
+     */
+    public connectInBackground(): void {
+        (async () => {
+            let attemptDelay = 2000;
+            while (!this.isConnected()) {
+                try {
+                    await this.connect();
+                    logger.info('RabbitMQ connected (background)');
+                    break;
+                } catch (err) {
+                    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+                    logger.warn('Background connection to RabbitMQ failed, retrying', { error: errorMessage });
+                    await new Promise((res) => setTimeout(res, attemptDelay));
+                    attemptDelay = Math.min(attemptDelay * 2, 30000);
+                }
+            }
+        })();
+    }
+
+    /**
      * Configura los manejadores de eventos para la conexión amqp para gestionar errores y cierres.
      * 
      * @private
