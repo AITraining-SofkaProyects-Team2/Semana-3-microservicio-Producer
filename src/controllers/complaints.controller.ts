@@ -49,7 +49,12 @@ export const complaintsController = {
         description,
       });
 
-      res.status(201).json(ticket);
+      res.status(202).json({
+        ticketId: ticket.ticketId,
+        status: ticket.status,
+        message: 'Accepted for processing',
+        createdAt: ticket.createdAt.toISOString(),
+      });
     } catch (error) {
       next(error);
     }
