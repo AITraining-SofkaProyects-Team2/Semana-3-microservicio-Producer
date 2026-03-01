@@ -3,6 +3,15 @@ import { IncidentType } from '../types/ticket.types.js';
 import type { IMessagingFacade } from '../messaging/IMessagingFacade.js';
 import { createComplaintsService } from './complaints.service.js';
 
+// Mock RabbitMQConnectionManager
+vi.mock('../messaging/RabbitMQConnectionManager.js', () => ({
+  RabbitMQConnectionManager: {
+    getInstance: vi.fn().mockReturnValue({
+      isConnected: vi.fn().mockReturnValue(true),
+    }),
+  },
+}));
+
 // Mock IMessagingFacade
 const mockMessaging: IMessagingFacade = {
   publishTicketCreated: vi.fn().mockResolvedValue(undefined),

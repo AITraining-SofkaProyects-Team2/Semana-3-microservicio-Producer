@@ -16,7 +16,7 @@ vi.mock('../messaging/RabbitMQConnectionManager.js', () => ({
       connect: vi.fn().mockResolvedValue(undefined),
       close: vi.fn().mockResolvedValue(undefined),
       getChannel: vi.fn().mockReturnValue(null),
-      isConnected: vi.fn().mockReturnValue(false),
+      isConnected: vi.fn().mockReturnValue(true),
     }),
     resetInstance: vi.fn(),
   },

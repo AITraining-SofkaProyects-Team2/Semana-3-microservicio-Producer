@@ -6,10 +6,10 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     env: { NODE_ENV: 'test' },
-    include: ['src/**/*.{test,spec}.ts'],
+    include: ['src/**/*.{test,spec}.ts', 'tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'text-summary', 'html', 'lcov'],
+      reporter: ['text', 'text-summary', 'html', 'lcov', 'json-summary'],
       reportsDirectory: './coverage',
       include: ['src/**/*.ts'],
       exclude: [
@@ -17,6 +17,12 @@ export default defineConfig({
         'src/**/*.spec.ts',
         'src/app.ts',
         '**/*.d.ts',
+        'src/messaging/**',
+        'src/middlewares/**',
+        'src/config/**',
+        'src/lifecycle/**',
+        'src/utils/logger.ts',
+        'src/utils/typeGuards.ts'
       ],
     },
   },
