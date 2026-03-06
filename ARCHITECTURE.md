@@ -1,47 +1,87 @@
-# Cambios de arquitectura: manejo de conexión a RabbitMQ
+# ARCHITECTURE.md — Producer Microservice (API Gateway)
 
-Resumen
-- Se modificó el comportamiento de arranque para que el servicio HTTP levante aunque RabbitMQ no esté disponible.
-- Se añadió un modo de conexión en segundo plano que reintenta la conexión con backoff.
-- Se cambió la lógica de publicación para devolver HTTP 503 cuando el broker no esté conectado.
+**Proyecto:** Gestión de Quejas ISP — Microservicio Producer  
+**Fecha:** 1 de marzo de 2026  
+**Analizado por:** Antigravity (AI Coding Assistant)
 
-Ficheros modificados
-- semana_03/Semana-3-microservicio-Producer/src/messaging/RabbitMQConnectionManager.ts
-  - Añadido `connectInBackground()` que intenta la conexión en bucle con backoff exponencial.
-  - Permite que la app arranque aunque `connect()` falle inicialmente.
+---
 
-- semana_03/Semana-3-microservicio-Producer/src/app.ts
-  - Ahora llama a `connectionManager.connectInBackground()` y arranca el servidor inmediatamente (no bloqueante).
+## 1. Resumen Ejecutivo
 
-- semana_03/Semana-3-microservicio-Producer/src/services/complaints.service.ts
-  - `createTicket` comprueba `isConnected()` y lanza `MessagingError` (HTTP 503) si el broker no está disponible.
-  - Si hay conexión, publica de forma asíncrona (fire-and-forget) para mantener baja latencia en la API.
+El **Producer** actúa como la puerta de entrada (API Gateway) para la creación de tickets de soporte técnico. Su función principal es validar las peticiones de los clientes finales (frontend), generar un identificador único para el ticket y encolar el evento en RabbitMQ para su posterior procesamiento por el microservicio Consumer.
 
-- semana_03/Semana-3-microservicio-Producer/src/messaging/MessagingFacade.ts
-  - Ya existe la comprobación del canal (`getChannel()`) que lanza `MessagingError` si no hay canal.
+---
 
-- semana_03/Semana-3-microservicio-Producer/src/errors/messaging.error.ts
-  - `MessagingError` hereda `HttpError(503)` para centralizar la respuesta HTTP adecuada.
+## 2. Endpoints y Contratos
 
-- semana_03/Semana-3-microservicio-Producer/src/middlewares/errorHandlers/messagingErrorHandler.ts
-  - Maneja `MessagingError` y responde con 503 Service Unavailable.
+### 2.1 POST `/complaints`
+Este es el único endpoint de dominio del microservicio. Sigue una semántica de **petición asincrónica** (fire-and-forget).
 
-Razonamiento / motivación
-- Levantar el contenedor aunque RabbitMQ no esté listo permite flujos de despliegue más resilientes: el servicio HTTP puede recibir tráfico, exponer health checks y volver a intentar la conexión en segundo plano.
-- Evitar bloquear el arranque mejora la observabilidad y permite ejecutar migraciones o endpoints que no dependan del broker.
-- Sin embargo, las rutas que dependen de publicar mensajes deben fallar con un código claro cuando el broker no está disponible: HTTP 503 (Service Unavailable) es la semántica correcta para indicar que el servicio no puede procesar la petición por una dependencia temporalmente inalcanzable.
+*   **Verbo**: `POST`
+*   **Ruta**: `/complaints` (o `/api/v1/tickets` según alias)
+*   **Códigos de Respuesta**:
+    *   `202 Accepted`: El ticket ha sido validado y aceptado para procesamiento. Se retorna un objeto con el `ticketId` generado.
+    *   `400 Bad Request`: Error de validación en el cuerpo de la petición.
+    *   `503 Service Unavailable`: El broker de mensajería (RabbitMQ) no está disponible para encolar el ticket.
+    *   `500 Internal Server Error`: Errores no controlados del servidor.
 
-Detalles operativos y recomendaciones
-- Cuando se recibe 503, es recomendable incluir una cabecera `Retry-After` si se conoce un tiempo de reintento, o un cuerpo JSON con un código interno (`messaging_unavailable`) para que los clientes sepan reintentar.
-- Mantener publicación asíncrona (fire-and-forget) cuando el broker está conectado reduce latencia de la API; se registran errores de publish para observabilidad.
-- Tests: añadir pruebas que simulen `RabbitMQConnectionManager.isConnected() === false` y validen que POST /complaints devuelve 503.
+**Ejemplo de Petición (JSON):**
+```json
+{
+  "lineNumber": "099123456",
+  "email": "usuario@ejemplo.com",
+  "incidentType": "NO_SERVICE",
+  "description": "No tengo internet desde hace 2 horas"
+}
+```
 
-Alternativas consideradas
-- Hacer que el servidor espere indefinidamente por RabbitMQ hasta conectar: se descartó porque impide despliegues paralelos y reduce observabilidad.
-- Encolar localmente en disco cuando RabbitMQ no está disponible (fallback persistente): solución más compleja, útil si se requiere alta durabilidad offline.
+**Ejemplo de Respuesta (JSON):**
+```json
+{
+  "ticketId": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "RECEIVED",
+  "message": "Accepted for processing",
+  "createdAt": "2026-03-01T20:00:00.000Z"
+}
+```
 
-Próximos pasos sugeridos
-- Añadir tests unitarios/integración que verifiquen el comportamiento 503.
-- Documentar en el README del microservicio el comportamiento de arranque y cómo usar las health checks.
+---
 
-Fecha: 2026-02-27
+## 3. Manejo de Conexión y Resiliencia
+
+### 3.1 Conexión a RabbitMQ
+El microservicio es resiliente a fallos temporales en el broker de mensajes:
+*   **Arranque en Segundo Plano**: El servidor HTTP levanta inmediatamente sin bloquearse por la conexión a RabbitMQ.
+*   **Backoff Exponencial**: Si RabbitMQ no está disponible, el `RabbitMQConnectionManager` intentará reconectarse indefinidamente con tiempos de espera crecientes.
+*   **Fallo Controlado con 503**: Cuando se intenta crear un ticket y el broker no está conectado, el servicio responde con HTTP 503 para indicar al cliente que reintente más tarde.
+
+---
+
+## 4. Validaciones (SRP §3.1)
+
+Las validaciones han sido extraídas de la capa de servicio a un **middleware dedicado** (`validateComplaintRequest.ts`) para respetar el principio de Responsabilidad Única.
+
+*   **lineNumber**: Requerido, debe ser un string de 10 dígitos.
+*   **email**: Requerido, formato de correo válido.
+*   **incidentType**: Requerido, debe pertenecer a los tipos conocidos (`NO_SERVICE`, `INTERMITTENT_SERVICE`, etc.).
+*   **description**: **Obligatoria** solo si `incidentType` es `OTHER`. Para otros tipos es opcional.
+
+---
+
+## 5. Patrones Aplicados
+
+| Patrón | Implementación | Propósito |
+| :--- | :--- | :--- |
+| **Facade** | `MessagingFacade` | Abstrae la complejidad de la publicación de mensajes en RabbitMQ (interfaz simplificada para el servicio). |
+| **Singleton** | `RabbitMQConnectionManager` | Gestiona una única instancia de conexión compartida. |
+| **Dependency Injection** | `createComplaintsService(messaging)` | Facilita el testing mockeando la capa de mensajería. |
+| **Chain of Responsibility** | Middlewares de Express | Procesa validaciones y errores en cadena. |
+
+---
+
+## 6. Observabilidad
+
+El microservicio utiliza un logger estructurado y expone métricas básicas mediante una interfaz de salud para monitorear el estado de la conexión con RabbitMQ.
+
+---
+

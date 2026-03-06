@@ -16,7 +16,7 @@ vi.mock('../messaging/RabbitMQConnectionManager.js', () => ({
       connect: vi.fn().mockResolvedValue(undefined),
       close: vi.fn().mockResolvedValue(undefined),
       getChannel: vi.fn().mockReturnValue(null),
-      isConnected: vi.fn().mockReturnValue(false),
+      isConnected: vi.fn().mockReturnValue(true),
     }),
     resetInstance: vi.fn(),
   },
@@ -79,7 +79,7 @@ describe('POST /complaints', () => {
     expect(res.body.details).toMatch(/description|OTHER/);
   });
 
-  it('devuelve 201 con ticketId y status RECEIVED', async () => {
+  it('devuelve 202 con ticketId y status RECEIVED', async () => {
     const res = await request(app)
       .post('/complaints')
       .send({
@@ -87,11 +87,13 @@ describe('POST /complaints', () => {
         email: 'user@example.com',
         incidentType: 'NO_SERVICE',
       })
-      .expect(201);
+      .expect(202);
 
     expect(res.body).toHaveProperty('ticketId');
     expect(res.body).toHaveProperty('status', 'RECEIVED');
     expect(typeof res.body.ticketId).toBe('string');
+    expect(res.body).toHaveProperty('createdAt');
+    expect(res.body).toHaveProperty('message', 'Accepted for processing');
   });
 
   it('responde rápido sin esperar al worker (solo publica evento)', async () => {
@@ -102,10 +104,11 @@ describe('POST /complaints', () => {
         email: 'u@e.com',
         incidentType: 'SLOW_CONNECTION',
       })
-      .expect(201);
+      .expect(202);
 
     expect(res.body.status).toBe('RECEIVED');
-    expect(res.body.priority).toBe('PENDING');
+    expect(res.body).toHaveProperty('message', 'Accepted for processing');
+    expect(res.body).toHaveProperty('createdAt');
   });
 
   it('acepta OTHER con description', async () => {
@@ -117,10 +120,11 @@ describe('POST /complaints', () => {
         incidentType: 'OTHER',
         description: 'Problema no listado',
       })
-      .expect(201);
+      .expect(202);
 
     expect(res.body.ticketId).toBeDefined();
     expect(res.body.status).toBe('RECEIVED');
+    expect(res.body).toHaveProperty('createdAt');
   });
 });
 
